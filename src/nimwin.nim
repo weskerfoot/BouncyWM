@@ -1,32 +1,93 @@
 import x11/xlib, x11/xutil, x11/x, x11/keysym
+import strformat, os, options, tables, random
+
+type XDirection = enum left, right
+type YDirection = enum up, down
+
+type Window = ref object of RootObj
+  x : cint
+  y : cint
+  width : cint
+  height : cint
+  speed : cint
+  win : TWindow
+  xDirection : XDirection
+  yDirection : YDirection
+
+var root : TWindow
+var windowState : Table[TWindow, Window] = initTable[TWindow, Window]()
+
+var invalidWindows : seq[TWindow]
+
+proc getWindowName(display : PDisplay, window : TWindow) : Option[string] =
+  var name : cstring
+  if display.XFetchName(window, name.addr) == BadWindow:
+    return none(string)
+  some($name)
+
+proc setWindowName(display : PDisplay, window : TWindow, name : cstring) : Option[string] =
+  if display.XStoreName(window, name) == BadWindow:
+    return none(string)
+  some($name)
+
+proc gcWindows(display : PDisplay) =
+  for xid, window in windowState.pairs:
+    discard display.getWindowName(xid)
+  for xid in invalidWindows:
+    windowState.del(xid)
+  invalidWindows = @[]
+
+proc ignoreBadWindows(display : PDisplay, ev : PXErrorEvent) : cint {.cdecl.} =
+  # resourceID maps to the Window's XID
+  invalidWindows &= @[ev.resourceID]
+  0
 
 proc getDisplay : PDisplay =
   result = XOpenDisplay(nil)
   if result == nil:
     quit("Failed to open display")
 
-proc grabMouse(display : PDisplay, button : int) =
-  discard XGrabButton(display,
-                      button.cuint,
-                      Mod1Mask.cuint,
-                      DefaultRootWindow(display),
-                      1.cint,
-                      ButtonPressMask or ButtonReleaseMask or PointerMotionMask,
-                      GrabModeAsync,
-                      GrabModeAsync,
-                      None,
-                      None)
+iterator getChildren(display : PDisplay, rootHeight : int, rootWidth : int) : Window =
+  var currentWindow : PWindow
+  var rootReturn : TWindow
+  var parentReturn : TWindow
+  var childrenReturn : PWindow
+  var nChildrenReturn : cuint
 
-proc grabKeys(display : PDisplay) =
-  let keyModifier = "F1"
-  discard XGrabKey(display,
-                   XKeySymToKeyCode(display,
-                                    XStringToKeySym(keyModifier.cstring)).cint,
-                   Mod1Mask.cuint,
-                   DefaultRootWindow(display),
-                   1.cint,
-                   GrabModeAsync.cint,
-                   GrabModeAsync.cint)
+  # Seed the RNG
+  randomize()
+
+  discard XQueryTree(display,
+                     root,
+                     rootReturn.addr,
+                     parentReturn.addr,
+                     childrenReturn.addr,
+                     nChildrenReturn.addr)
+
+
+  for i in 0..(nChildrenReturn.int - 1):
+    var attr : TXWindowAttributes
+
+    currentWindow = cast[PWindow](
+      cast[uint](childrenReturn) + cast[uint](i * currentWindow[].sizeof)
+    )
+
+    if display.XGetWindowAttributes(currentWindow[], attr.addr) == BadWindow:
+      windowState.del(currentWindow[])
+      continue
+
+    yield Window(
+      x: rand(0..rootWidth).cint,
+      y: rand(0..rootHeight).cint,
+      xDirection: right,
+      yDirection: down,
+      width: attr.width,
+      height: attr.height,
+      win: currentWindow[],
+      speed: 10
+    )
+
+  discard XFree(childrenReturn)
 
 when isMainModule:
   var start : TXButtonEvent
@@ -35,39 +96,51 @@ when isMainModule:
 
   let display = getDisplay()
 
-  display.grabKeys
-  display.grabMouse(1)
-  display.grabMouse(3)
-
+  root = DefaultRootWindow(display)
   start.subWindow = None
 
+  discard XSetErrorHandler(ignoreBadWindows)
+  discard display.XGetWindowAttributes(root, attr.addr)
+
+  let rootWidth = attr.width
+  let rootHeight = attr.height
+
   while true:
-    # TODO refactor using XPending ?
-    discard XNextEvent(display, ev.addr)
+    sleep(10)
 
-    # subwindow is because we grabbed the root window
-    # and we want events in its children
+    for window in getChildren(display, rootHeight, rootWidth):
+      # go through each window, add it to the state
+      discard windowState.hasKeyOrPut(window.win, window)
 
-    if (ev.theType == KeyPress) and (ev.xKey.subWindow != None):
-      discard XRaiseWindow(display, ev.xKey.subWindow)
+    display.gcWindows()
 
-    elif (ev.theType == ButtonPress) and (ev.xButton.subWindow != None):
-      discard XGetWindowAttributes(display, ev.xButton.subWindow, attr.addr)
-      start = ev.xButton
+    # Go through each window and move them, update the state, etc
+    for window in windowState.values:
+      if window.xDirection == right:
+        if window.x == (rootWidth - window.width) or window.x > rootWidth:
+          windowState[window.win].xDirection = left
+          windowState[window.win].x -= 1
+        else:
+          windowState[window.win].x += 1
+      else:
+        if window.x <= 0:
+          windowState[window.win].xDirection = right
+          windowState[window.win].x += 1
+        else:
+          windowState[window.win].x -= 1
 
-    elif (ev.theType == MotionNotify) and (start.subWindow != None):
-      var xDiff : int = ev.xButton.xRoot - start.xRoot
-      var yDiff : int = ev.xButton.yRoot - start.yRoot
+      if window.yDirection == up:
+        if window.y <= 0:
+          windowState[window.win].yDirection = down
+          windowState[window.win].y += 1
+        else:
+          windowState[window.win].y -= 1
+      else:
+        if window.y >= (rootHeight - window.height):
+          windowState[window.win].yDirection = up
+          windowState[window.win].y -= 1
+        else:
+          windowState[window.win].y += 1
 
-      discard XMoveResizeWindow(display,
-                                start.subWindow,
-                                attr.x + (if start.button == 1: xDiff else: 0).cint,
-                                attr.y + (if start.button == 1: yDiff else: 0).cint,
-                                max(1, attr.width + (if start.button == 3: xDiff else: 0)).cuint,
-                                max(1, attr.height + (if start.button == 3: yDiff else: 0)).cuint)
-
-    elif ev.theType == ButtonRelease:
-      start.subWindow = None
-
-    else:
-      continue
+      discard display.XMoveWindow(window.win, windowState[window.win].x, windowState[window.win].y)
+    discard display.XSync(0)
