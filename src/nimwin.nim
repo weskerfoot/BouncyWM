@@ -79,7 +79,7 @@ iterator getChildren(display : PDisplay, rootHeight : int, rootWidth : int) : Wi
       width: attr.width,
       height: attr.height,
       win: currentWindow[],
-      speed: 10
+      speed: rand(1..3).cint
     )
 
   discard XFree(childrenReturn)
@@ -112,30 +112,30 @@ when isMainModule:
     # Go through each window and move them, update the state, etc
     for window in windowState.values:
       if window.xDirection == right:
-        if window.x == (rootWidth - window.width) or window.x > rootWidth:
+        if window.x >= (rootWidth - window.width):
           windowState[window.win].xDirection = left
-          windowState[window.win].x -= 1
+          windowState[window.win].x -= window.speed
         else:
-          windowState[window.win].x += 1
+          windowState[window.win].x += window.speed
       else:
         if window.x <= 0:
           windowState[window.win].xDirection = right
-          windowState[window.win].x += 1
+          windowState[window.win].x += window.speed
         else:
-          windowState[window.win].x -= 1
+          windowState[window.win].x -= window.speed
 
       if window.yDirection == up:
         if window.y <= 0:
           windowState[window.win].yDirection = down
-          windowState[window.win].y += 1
+          windowState[window.win].y += window.speed
         else:
-          windowState[window.win].y -= 1
+          windowState[window.win].y -= window.speed
       else:
         if window.y >= (rootHeight - window.height):
           windowState[window.win].yDirection = up
-          windowState[window.win].y -= 1
+          windowState[window.win].y -= window.speed
         else:
-          windowState[window.win].y += 1
+          windowState[window.win].y += window.speed
 
       discard display.XMoveWindow(window.win, windowState[window.win].x, windowState[window.win].y)
     discard display.XSync(0)
