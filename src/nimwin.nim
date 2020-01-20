@@ -25,11 +25,6 @@ proc getWindowName(display : PDisplay, window : TWindow) : Option[string] =
     return none(string)
   some($name)
 
-proc setWindowName(display : PDisplay, window : TWindow, name : cstring) : Option[string] =
-  if display.XStoreName(window, name) == BadWindow:
-    return none(string)
-  some($name)
-
 proc gcWindows(display : PDisplay) =
   for xid, window in windowState.pairs:
     discard display.getWindowName(xid)
