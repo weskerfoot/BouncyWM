@@ -95,12 +95,11 @@ when isMainModule:
   start.subWindow = None
 
   discard XSetErrorHandler(ignoreBadWindows)
-  discard display.XGetWindowAttributes(root, attr.addr)
-
-  let rootWidth = attr.width
-  let rootHeight = attr.height
 
   while true:
+    discard display.XGetWindowAttributes(root, attr.addr)
+    let rootWidth = attr.width
+    let rootHeight = attr.height
     sleep(10)
 
     for window in getChildren(display, rootHeight, rootWidth):
