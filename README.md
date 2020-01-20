@@ -21,6 +21,4 @@ env DISPLAY=:1 ./nimwin
 If you want to run xterm, for example, just run `xterm -display :1`
 
 
-### Screenshots
-
 ![Screenshot of htop and vim bouncing](screenshots/example.gif)
