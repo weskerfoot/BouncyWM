@@ -34,7 +34,7 @@ proc gcWindows(display : PDisplay) =
 
 proc ignoreBadWindows(display : PDisplay, ev : PXErrorEvent) : cint {.cdecl.} =
   # resourceID maps to the Window's XID
-  invalidWindows &= @[ev.resourceID]
+  invalidWindows.add(ev.resourceID)
   0
 
 proc getDisplay : PDisplay =
