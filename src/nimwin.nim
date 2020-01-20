@@ -49,9 +49,6 @@ iterator getChildren(display : PDisplay, rootHeight : int, rootWidth : int) : Wi
   var childrenReturn : PWindow
   var nChildrenReturn : cuint
 
-  # Seed the RNG
-  randomize()
-
   discard XQueryTree(display,
                      root,
                      rootReturn.addr,
@@ -85,6 +82,9 @@ iterator getChildren(display : PDisplay, rootHeight : int, rootWidth : int) : Wi
   discard XFree(childrenReturn)
 
 when isMainModule:
+  # Seed the RNG
+  randomize()
+
   var start : TXButtonEvent
   var ev : TXEvent
   var attr : TXWindowAttributes
